@@ -176,8 +176,10 @@ function createPostElement(post) {
 
     const likes = post.likes || 0;
     const smiles = post.smiles || 0;
+    const ok = post.ok || 0;         // 追加
+    const hearts = post.hearts || 0; // 追加
 
-    // リアクションボタンを追加
+    // 新しいリアクションボタンを追加
     return `
         <div class="post" id="post-${post.id}">
             <div class="post-header">
@@ -190,6 +192,10 @@ function createPostElement(post) {
                 <span id="likes-${post.id}">${likes}</span>
                 <button class="btn-reaction" onclick="addReaction('${post.id}', 'smiles')">😊</button>
                 <span id="smiles-${post.id}">${smiles}</span>
+                <button class="btn-reaction" onclick="addReaction('${post.id}', 'ok')">👌</button>
+                <span id="ok-${post.id}">${ok}</span>
+                <button class="btn-reaction" onclick="addReaction('${post.id}', 'hearts')">❤️</button>
+                <span id="hearts-${post.id}">${hearts}</span>
             </div>
             <div class="post-footer">
                 <span class="post-time">${formatTimestamp(post.timestamp)}</span>
@@ -197,6 +203,7 @@ function createPostElement(post) {
         </div>
     `;
 }
+
 
 // リアクション処理
 function addReaction(postId, reactionType) {
@@ -212,9 +219,10 @@ function addReaction(postId, reactionType) {
         }
         return post;
     }).catch((error) => {
-        console.error('Failed to update reaction:', error);
+        console.error('リアクションの更新に失敗しました:', error);
     });
 }
+
 
 
 // 投稿の表示処理
@@ -255,6 +263,7 @@ function loadPosts() {
         console.error('データの読み込みに失敗しました:', error);
     });
 }
+
 
 
 // モーダル関連の関数
