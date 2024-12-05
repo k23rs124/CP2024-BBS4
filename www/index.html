@@ -109,12 +109,14 @@ function createPost(author, content) {
     const button = $('#postButton');
     button.prop('disabled', true);
 
-    // author はログインしているユーザのメールアドレスに変更、userId を追加
+    // 投稿データにリアクションカウンターを追加
     const postData = {
         author: currentUser.email,
         content: content,
         timestamp: firebase.database.ServerValue.TIMESTAMP,
-        userId: currentUser.uid
+        userId: currentUser.uid,
+        likes: 0, // 初期化
+        smiles: 0 // 初期化
     };
 
     postsRef.push(postData)
@@ -130,6 +132,7 @@ function createPost(author, content) {
             button.prop('disabled', false);
         });
 }
+
 
 // HTMLエスケープ処理
 function escapeHtml(str) {
@@ -162,52 +165,57 @@ function canEditPost(post) {
 // 投稿のHTML要素を生成
 // 　バグ入りなので要修正（編集・削除機能表示判定が誤っている）
 function createPostElement(post) {
-    // 編集権限を確認
     const canEdit = canEditPost(post);
-    // 編集権限があれば、編集・削除機能を表示
-    const actions = canEdit ? `
-        <div class="post-actions">
-            <button class="btn-edit" onclick="startEdit('${post.id}')">
-                編集
-            </button>
-            <button class="btn-delete" onclick="deletePost('${post.id}')">
-                削除
-            </button>
-        </div>
-    ` : '';
 
+    const actions = canEdit
+        ? `<div class="post-actions">
+            <button class="btn-edit" onclick="startEdit('${post.id}')">編集</button>
+            <button class="btn-delete" onclick="deletePost('${post.id}')">削除</button>
+           </div>`
+        : '';
+
+    const likes = post.likes || 0;
+    const smiles = post.smiles || 0;
+
+    // リアクションボタンを追加
     return `
         <div class="post" id="post-${post.id}">
             <div class="post-header">
                 <span class="post-author">${escapeHtml(post.author)}</span>
-                <!-- 編集権限があれば、編集・削除機能を表示 -->
                 ${actions}
             </div>
             <div class="post-content">${escapeHtml(post.content)}</div>
-            <div class="edit-form">
-                <textarea class="form-control" id="edit-${post.id}"></textarea>
-                <div class="button-group">
-                    <button class="btn-primary" onclick="updatePost('${post.id}')">
-                        更新
-                    </button>
-                    <button class="btn-cancel" onclick="cancelEdit('${post.id}')">
-                        キャンセル
-                    </button>
-                </div>
+            <div class="post-reactions">
+                <button class="btn-reaction" onclick="addReaction('${post.id}', 'likes')">👍</button>
+                <span id="likes-${post.id}">${likes}</span>
+                <button class="btn-reaction" onclick="addReaction('${post.id}', 'smiles')">😊</button>
+                <span id="smiles-${post.id}">${smiles}</span>
             </div>
             <div class="post-footer">
-                <span class="post-time">
-                    ${formatTimestamp(post.timestamp)}
-                </span>
-                ${post.updatedAt ? `
-                    <span class="post-updated">
-                        (編集済み: ${formatTimestamp(post.updatedAt)})
-                    </span>
-                ` : ''}
+                <span class="post-time">${formatTimestamp(post.timestamp)}</span>
             </div>
         </div>
     `;
 }
+
+// リアクション処理
+function addReaction(postId, reactionType) {
+    const postRef = postsRef.child(postId);
+
+    // Firebaseのトランザクションでリアクション数を安全に更新
+    postRef.transaction((post) => {
+        if (post) {
+            if (!post[reactionType]) {
+                post[reactionType] = 0;
+            }
+            post[reactionType]++;
+        }
+        return post;
+    }).catch((error) => {
+        console.error('Failed to update reaction:', error);
+    });
+}
+
 
 // 投稿の表示処理
 function renderPosts(posts) {
@@ -224,18 +232,13 @@ function renderPosts(posts) {
     });
 }
 
-// 投稿の読み込み
+// 投稿一覧を読み込む
 function loadPosts() {
-    const sortOrder = $('#sortOrder').val();
-    $('#loadingSpinner').show();
-
-    // 既存のリスナーを解除
     if (postsListener) {
         postsRef.off('value', postsListener);
-        postsListener = null;
     }
 
-    // リスナーを設定
+    // Firebaseデータのリアルタイムリスナーを設定
     postsListener = postsRef.on('value', (snapshot) => {
         const posts = [];
         snapshot.forEach((childSnapshot) => {
@@ -245,21 +248,14 @@ function loadPosts() {
             });
         });
 
-        // 並び順の適用
-        if (sortOrder === 'newest') {
-            posts.sort((a, b) => b.timestamp - a.timestamp);
-        } else {
-            posts.sort((a, b) => a.timestamp - b.timestamp);
-        }
-
+        // 並び順（新しい順に並べ替え）
+        posts.sort((a, b) => b.timestamp - a.timestamp);
         renderPosts(posts);
-        $('#loadingSpinner').hide();
     }, (error) => {
-        console.error('Data fetch error:', error);
-        showMessage('データの読み込みに失敗しました', 'error');
-        $('#loadingSpinner').hide();
+        console.error('データの読み込みに失敗しました:', error);
     });
 }
+
 
 // モーダル関連の関数
 function showModal(modalId) {
@@ -455,6 +451,14 @@ function updateUI(user) {
         $('#userEmail').text('');
     }
 }
+function showPreview(content) {
+    const previewArea = $('#previewArea');
+    previewArea.html(escapeHtml(content));
+}
+$('#contentInput').on('input', function() {
+    showPreview($(this).val());
+});
+
 
 $(function() {
     // Firebaseの初期化
